@@ -1,87 +1,104 @@
-
-
-
-.app{
-  text-align:center;
+/* GENERAL APP STYLING */
+.app {
+  text-align: center;
   font-family: 'Arial', sans-serif;
-  background-color:#d0d0d0;
-  min-height:100vh;
-  padding:20px;
+  background-color: #d0d0d0;
+  min-height: 100vh;
+  padding: 20px;
 }
 
-.players-card{
-  display:flex;
-  flex-direction:row;
+/* PLAYERS SECTION */
+.players-card {
+  display: flex;
+  justify-content: center;
   align-items: center;
-  justify-content:center;
   margin-top: 20px;
-  /* border:2px solid black; */
-  padding:15px;
-  background-color: #f0f0f0; 
-  
+  padding: 15px;
+  background-color: #f0f0f0;
 }
 
-
-
-.versus{
-  font-size:70px;
-  font-weight:bold;
-  color:red;
-  margin-left:25px;
-  margin-right:25px;
+.player {
+  text-align: center;
+  font-size: 10px;
+  background-color: black;
+  color: white;
+  padding: 10px;
+  border-radius: 10px;
+  width: 150px;
 }
 
-.player{
-  text-align:center;
-  font-size:10px;
-  background-color:black;
-  color:white;
-  padding:10px;
-  border-radius:10px;
-  width:150px;
-  
+.player img {
+  width: 100px;
+  height: 100px;
 }
 
-.player img{
-  width:100px;
-  height:100px;
-  /* border-radius:50%; */
-  /* margin-bottom:10px; */
-}
-.player .score{
-  font-size:18px;
-  font-weight:bold;
-  margin-top:10px;
+.player .score {
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 10px;
 }
 
-
-
-
-.grid{
-  display:grid;
-  grid-template-columns: repeat(4, 80px);
-  gap:8px;
-  padding:20px;
-  justify-items: center;
-  align-items: center;
-  margin-top:30px;
-  background-color:#e0e0e0;  
-  width: fit-content;
-  margin: 50px auto;
-  margin-top:50px;
-
+.versus {
+  font-size: 70px;
+  font-weight: bold;
+  color: red;
+  margin: 0 25px;
 }
 
-.card{
-  font-size:50px;
-  width:"100px";
-  height:"100px";
-  background-color:#ffffff;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  border-radius:10px;
-  cursor:pointer;
+/* GRID OF CARDS */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 100px);
+  gap: 15px;
+  justify-content: center;
+  margin-top: 30px;
+}
 
+/* CARD OUTER */
+.card {
+  width: 100px;
+  height: 100px;
   perspective: 1000px;
+  cursor: pointer;
+}
+
+/* INNER ROTATING CARD */
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s;
+}
+
+/* FLIP ROTATION */
+.card.flipped .card-inner {
+  transform: rotateY(180deg);
+}
+
+/* CARD FACES */
+.card-front,
+.card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 40px;
+  border-radius: 10px;
+}
+
+/* FRONT FACE */
+.card-front {
+  background-color: white;
+}
+
+/* BACK FACE */
+.card-back {
+  background-color: royalblue;
+  transform: rotateY(180deg);
+  color: white;
+  font-size: 30px;
 }
