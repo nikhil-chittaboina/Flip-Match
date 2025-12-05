@@ -6,7 +6,7 @@ const Player = ({ name, img }) => {
     <div className="player">
       <img src={img} alt="" />
       <h2>{name}</h2>
-      <p className="score">Score: 0</p>
+      <p className="score">Score : 0</p>
     </div>
   );
 };
