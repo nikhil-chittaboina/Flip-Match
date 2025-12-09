@@ -1,248 +1,199 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+import { shootConfetti } from "./lib/confetti"; // Assuming this utility is available
+import Title from './components/Title';
+import PlayersCard from './components/PlayersCard';
+import Grid from './components/Grid';
+import GameSettings from './components/GameSettings';
+import Toast from './components/Toast';
+import GameEndOverlay from './components/GameEndOverlay';
+import Leaderboard from './components/Leaderboard';
+import { submitScore } from './lib/api';
 
-const Player = ({ name, img, score, active }) => {
-  return (
-    <div className={`player ${active ? 'active' : ''}`}>
-      <div className="turn-badge">Your turn</div>
-      <img src={img} alt="Player" />
-      <h2>{name}</h2>
-      <p className="score">Score : {score}</p>
-    </div>
-  );
-};
 
-const Versus = () => {
-  return <div className="versus">VS</div>;
-};
 
-const Title = () => {
-  return <h1 className="title">Flip-Match</h1>;
-};
 
-const PlayersCard = ({ score, currentPlayer }) => {
-  return (
-    <div className="players-card">
-      <Player
-        name="Player 1"
-        img="/player1.png"
-        score={score["A"]}
-        active={currentPlayer === 'A'}
-      />
-      <Versus />
-      <Player
-        name="Player 2"
-        img="/player2.png"
-        score={score["B"]}
-        active={currentPlayer === 'B'}
-      />
-    </div>
-  );
-};
 
-const Grid = ({ onMatch, onMismatch, gameOver, gameKey }) => {
-  const emojis = ["🐶", "🐱", "🐻", "🐼", "🦁", "🐸"];
-  const shuffleCards = () => {
-    let double = [...emojis, ...emojis];
-    double.sort(() => Math.random() - 0.5);
-    return double;
-  };
 
-  const [cards, setCards] = useState(shuffleCards);
 
-  // Track which cards are currently flipped (temporary, max 2 cards)
-  // Also used directly for comparison - no need for separate cardsToCompare!
-  const [flippedCards, setFlippedCards] = useState([]);
-  // Track which cards are matched (permanently visible)
-  const [matchedCards, setMatchedCards] = useState([]);
-  // Track the last mismatched pair for a brief UI effect
-  const [mismatchCards, setMismatchCards] = useState([]);
-  // Prevent clicking during flip animation
-  const [isProcessing, setIsProcessing] = useState(false);
-  // Store timeout ID for cleanup
-  const timeoutRef = useRef(null);
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
 
-  // Reset grid state when gameKey changes (new game)
-  useEffect(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    setCards(shuffleCards());
-    setFlippedCards([]);
-    setMatchedCards([]);
-    setMismatchCards([]);
-    setIsProcessing(false);
-  }, [gameKey]);
 
-  const handleCardClick = (index) => {
-    // Prevent clicking if:
-    // - Card is already matched
-    // - Card is already flipped
-    // - Already have 2 cards flipped
-    // - Currently processing a match
-    if (
-      matchedCards.includes(index) ||
-      flippedCards.includes(index) ||
-      flippedCards.length >= 2 ||
-      isProcessing ||
-      gameOver
-    ) {
-      return;
-    }
-
-    // Add card to flipped cards (this is also our comparison array!)
-    const newFlipped = [...flippedCards, index];
-    setFlippedCards(newFlipped);
-
-    // If we have 2 cards, check for match
-    if (newFlipped.length === 2) {
-      setIsProcessing(true);
-      const [firstIndex, secondIndex] = newFlipped;
-      
-      // Check if cards match
-      if (cards[firstIndex] === cards[secondIndex]) {
-        // Match found! Move to matchedCards and clear flippedCards
-        const newMatched = [...matchedCards, firstIndex, secondIndex];
-        const isFinalMatch = newMatched.length === cards.length;
-        setMatchedCards(newMatched);
-        setFlippedCards([]); // Clear - matched cards are now in matchedCards
-        setIsProcessing(false);
-        onMatch(isFinalMatch); // Notify parent of a match (and if game ended)
-      } else {
-        // Mark mismatched cards for a brief visual cue
-        setMismatchCards(newFlipped);
-        // No match - flip cards back after delay
-        // Clear any existing timeout first
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        timeoutRef.current = setTimeout(() => {
-          setFlippedCards([]); // Clear both cards
-          setMismatchCards([]); // Clear mismatch highlight
-          setIsProcessing(false);
-          timeoutRef.current = null;
-          onMismatch(); // Notify parent of a mismatch
-        }, 1000); // 1 second delay
-      }
-    }
-  };
-
-  return (
-    <div className="grid">
-      {cards.map((emoji, index) => {
-        const isFlipped = flippedCards.includes(index) || matchedCards.includes(index);
-        const isMatched = matchedCards.includes(index);
-        const isMismatch = mismatchCards.includes(index);
-        
-        return (
-          <div
-            className={`card ${isFlipped ? 'flipped' : ''} ${isMatched ? 'matched' : ''} ${isMismatch ? 'mismatch' : ''}`}
-            key={index}
-            onClick={() => handleCardClick(index)}
-          >
-            <div className="card-inner">
-              <div className="card-front">{emoji}</div>
-              <div className="card-back">❓</div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
+// =========================================================
+// 3. App Component (Game Control and Flow)
+// =========================================================
 
 const App = () => {
-  const [currentPlayer, setCurrentPlayer] = useState('A');
-  const [score, setScore] = useState({ A: 0, B: 0 });
-  const [gameOver, setGameOver] = useState(false);
-  const [winner, setWinner] = useState(null); // 'A' | 'B' | 'tie' | null
-  const [gameKey, setGameKey] = useState(0); // triggers grid reset
+  
+  // 3.1. CONFIGURATION STATE
+	const [config, setConfig] = useState({
+		gridSize: '4x3',
+		isStarted: false,
+		mode: 'classic', // 'classic' | 'secret'
+		secretCount: 0, // 0,2,4
+	});
 
-  const audioRef = useRef(new Audio("/changeTurn.wav"));
-  audioRef.current.volume = 0.3;
+  // 3.2. GAME STATES
+  const [currentPlayer, setCurrentPlayer] = useState('A');
+  const [score, setScore] = useState({ A: 0, B: 0 });
+  const [gameOver, setGameOver] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const [gameKey, setGameKey] = useState(0); 
 
-  const playTurnSound = () => {
-    audioRef.current.currentTime = 0; // reset to start
-    audioRef.current.play().catch((err) => console.log(err));
-  };
+  // 3.3. AUDIO REFS AND SOUNDS
+  const audioRef = useRef(new Audio("/changeTurn.wav"));
+  audioRef.current.volume = 0.3;
+  const congratsAudioRef = useRef(new Audio("/congrats.mp3"));
+  
+  const playTurnSound = () => {
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch((err) => console.log(err));
+  };
+  
+  const finishGame = (finalScores) => {
+    if (finalScores.A === finalScores.B) {
+      setWinner('tie');
+    } else if (finalScores.A > finalScores.B) {
+      setWinner('A');
+    } else {
+      setWinner('B');
+    }
+    setGameOver(true);
+  };
 
-  const finishGame = (finalScores) => {
-    if (finalScores.A === finalScores.B) {
-      setWinner('tie');
-    } else if (finalScores.A > finalScores.B) {
-      setWinner('A');
-    } else {
-      setWinner('B');
-    }
-    setGameOver(true);
-  };
+	const onMatch = (isFinalMatch = false) => {
+		setScore((prevScore) => {
+			const updated = {
+				...prevScore,
+				[currentPlayer]: prevScore[currentPlayer] + 1,
+			};
+			if (isFinalMatch) {
+				setTimeout(() => {
+					congratsAudioRef.current.currentTime = 0;
+					congratsAudioRef.current.play().catch((err) => console.log(err));
+					shootConfetti();
+				}, 100);
+				finishGame(updated);
 
-  const onMatch = (isFinalMatch = false) => {
-    setScore((prevScore) => {
-      const updated = {
-        ...prevScore,
-        [currentPlayer]: prevScore[currentPlayer] + 1,
-      };
-      if (isFinalMatch) {
-        finishGame(updated);
-      }
-      return updated;
-    });
-    playTurnSound();
-    // currentPlayer stays the same on a match
-  };
+				// Submit final scores to Supabase (fire-and-forget)
+				try {
+					submitScore({ playerName: 'Player 1', score: updated.A, mode: config.mode, gridSize: config.gridSize })
+						.catch(err => showToast('Score submit failed'));
+					submitScore({ playerName: 'Player 2', score: updated.B, mode: config.mode, gridSize: config.gridSize })
+						.catch(err => showToast('Score submit failed'));
+					showToast('Scores submitted');
+				} catch (e) {
+					showToast('Score submit failed');
+				}
+			}
+			return updated;
+		});
+		playTurnSound(); 
+	};
 
-  const onMismatch = () => {
-    // Switch to the other player on mismatch
-    setCurrentPlayer((prevPlayer) => (prevPlayer === 'A' ? 'B' : 'A'));
-  };
+  const onMismatch = () => {
+    setCurrentPlayer((prevPlayer) => (prevPlayer === 'A' ? 'B' : 'A'));
+  };
 
-  const handleRestart = () => {
-    setScore({ A: 0, B: 0 });
-    setCurrentPlayer('A');
-    setGameOver(false);
-    setWinner(null);
-    setGameKey((k) => k + 1); // triggers grid reshuffle/reset
-  };
+  // 3.4. FLOW CONTROL FUNCTIONS (UPDATED)
+  const handleRestart = () => {
+    setScore({ A: 0, B: 0 });
+    setCurrentPlayer('A');
+    setGameOver(false);
+    setWinner(null);
+    setGameKey((k) => k + 1); 
 
-  return (
-    <div className="app">
-      <Title />
-      <PlayersCard score={score} currentPlayer={currentPlayer} />
-      <Grid
-        onMatch={onMatch}
-        onMismatch={onMismatch}
-        gameOver={gameOver}
-        gameKey={gameKey}
-      />
-      {gameOver && (
-        <div className="game-end-overlay">
-          <div className="game-end-card">
-            <div className="game-end-title">
-              {winner === 'tie' ? 'Tie Game!' : `${winner === 'A' ? 'Player 1' : 'Player 2'} Wins!`}
-            </div>
-            <div className="game-end-scores">
-              <span>Player 1: {score.A}</span>
-              <span>Player 2: {score.B}</span>
-            </div>
-            <button className="restart-btn" onClick={handleRestart}>
-              Restart
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    // Return to Settings Screen
+    setConfig(prevConfig => ({
+      ...prevConfig,
+      isStarted: false, 
+    }));
+  };
+
+	const handleStartGame = (selectedGridSize, selectedMode = 'classic', selectedSecretCount = 0) => {
+		setConfig({
+			gridSize: selectedGridSize,
+			isStarted: true,
+			mode: selectedMode,
+			secretCount: selectedSecretCount,
+		});
+
+		// Ensure all game states are perfectly reset
+		setScore({ A: 0, B: 0 });
+		setCurrentPlayer('A');
+		setGameOver(false);
+		setWinner(null);
+		setGameKey((k) => k + 1);
+	};
+
+	// called when a bomb special is triggered: apply penalty and switch turn
+	const handleBomb = () => {
+		setScore(prev => ({
+			...prev,
+			[currentPlayer]: Math.max(0, prev[currentPlayer] - 1),
+		}));
+		// switch turn
+		setCurrentPlayer(prev => (prev === 'A' ? 'B' : 'A'));
+		showToast('-1 point!');
+	};
+
+	// called when a swap special is triggered: swap players' scores
+	const handleSwap = () => {
+		setScore(prev => {
+			return { A: prev.B, B: prev.A };
+		});
+		// keep the same currentPlayer (or optionally switch) — we'll keep the turn as-is
+		showToast('Scores swapped!');
+	};
+
+	// Toast notification state
+	const [toast, setToast] = useState(null);
+	const toastTimer = useRef(null);
+	const showToast = (msg, ms = 1400) => {
+		setToast(msg);
+		if (toastTimer.current) clearTimeout(toastTimer.current);
+		toastTimer.current = setTimeout(() => setToast(null), ms);
+	};
+  
+
+// `GameSettings` moved to `src/components/GameSettings.jsx` and is imported above.
+
+
+	return (
+		<div className="app">
+			<Title />
+
+			{/* CONDITIONAL RENDERING: Settings vs. Game */}
+			{!config.isStarted ? (
+				<GameSettings onStart={handleStartGame} defaultConfig={config} /> // Show settings if not started
+			) : (
+				<>
+					<PlayersCard score={score} currentPlayer={currentPlayer} />
+					<div className="grid-panel">
+						<Grid
+							onMatch={onMatch}
+							onMismatch={onMismatch}
+							gameOver={gameOver}
+							gameKey={gameKey}
+							gridSize={config.gridSize} // Pass the selected size
+							mode={config.mode}
+							secretCount={config.secretCount}
+							onBomb={handleBomb}
+							onSwap={handleSwap}
+						/>
+					</div>
+				</>
+			)}
+      
+			{/* GAME OVER OVERLAY */}
+			{gameOver && (
+				<GameEndOverlay winner={winner} score={score} onRestart={handleRestart} />
+			)}
+      
+			{/* Toast */}
+			<Toast message={toast} />
+		</div>
+	);
 };
 
 export default App;
